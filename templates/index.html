@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PO SKU Similarity &amp; Mapping POC — MongoDB Vector Search</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --surface: #1e293b;
+      --surface-2: #273449;
+      --border: #334155;
+      --text: #f1f5f9;
+      --muted: #94a3b8;
+      --accent: #10b981;
+      --accent-hover: #059669;
+      --blue: #38bdf8;
+      --amber: #f59e0b;
+      --red: #ef4444;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 28px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    header h1 { margin: 0; font-size: 1.25rem; font-weight: 600; }
+    .badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--accent);
+      border: 1px solid rgba(16, 185, 129, 0.35);
+    }
+    .badge-blue {
+      background: rgba(56, 189, 248, 0.15);
+      color: var(--blue);
+      border-color: rgba(56, 189, 248, 0.35);
+    }
+    .badge-amber {
+      background: rgba(245, 158, 11, 0.15);
+      color: var(--amber);
+      border-color: rgba(245, 158, 11, 0.35);
+    }
+    .container { max-width: 1240px; margin: 20px auto; padding: 0 20px; }
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .kpi {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 16px;
+    }
+    .kpi-label { font-size: 0.76rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+    .kpi-value { font-size: 1.5rem; font-weight: 700; margin-top: 2px; color: var(--text); }
+    .kpi-sub { font-size: 0.78rem; color: var(--accent); margin-top: 2px; }
+    .tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 12px;
+      flex-wrap: wrap;
+    }
+    .tab-btn {
+      background: var(--surface);
+      color: var(--muted);
+      border: 1px solid var(--border);
+      padding: 9px 18px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 0.9rem;
+      font-weight: 500;
+      transition: all 0.15s;
+    }
+    .tab-btn:hover { color: var(--text); border-color: var(--muted); }
+    .tab-btn.active {
+      background: var(--accent);
+      color: #042f2e;
+      border-color: var(--accent);
+      font-weight: 600;
+    }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    .card h2 { margin: 0 0 12px 0; font-size: 1.05rem; }
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 170px 170px 90px auto;
+      gap: 12px;
+      align-items: end;
+    }
+    .form-row-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-top: 12px;
+    }
+    label { display: block; font-size: 0.8rem; color: var(--muted); margin-bottom: 5px; }
+    input, select {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text);
+      font-size: 0.92rem;
+    }
+    input:focus, select:focus { outline: none; border-color: var(--accent); }
+    button.primary {
+      background: var(--accent);
+      color: #042f2e;
+      border: none;
+      padding: 10px 18px;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 0.92rem;
+    }
+    button.primary:hover { background: var(--accent-hover); }
+    button.secondary {
+      background: var(--surface-2);
+      color: var(--text);
+      border: 1px solid var(--border);
+      padding: 8px 13px;
+      border-radius: 7px;
+      cursor: pointer;
+      font-size: 0.84rem;
+    }
+    button.secondary:hover { border-color: var(--blue); color: var(--blue); }
+    button.danger {
+      background: transparent;
+      color: var(--red);
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      padding: 5px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.8rem;
+    }
+    button.danger:hover { background: rgba(239, 68, 68, 0.15); }
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    .chip {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 0.78rem;
+      cursor: pointer;
+    }
+    .chip:hover { color: var(--text); border-color: var(--blue); }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 0.88rem; }
+    th, td {
+      text-align: left;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+    th {
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .sku-pill {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      padding: 2px 7px;
+      border-radius: 6px;
+      font-size: 0.82rem;
+      color: var(--amber);
+      white-space: nowrap;
+    }
+    .score-wrap { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+    .score-bar { width: 56px; height: 6px; background: var(--bg); border-radius: 999px; overflow: hidden; }
+    .score-fill { height: 100%; background: var(--accent); }
+    pre.pipeline-box {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      font-size: 0.8rem;
+      overflow-x: auto;
+      color: #cbd5e1;
+      margin: 10px 0 0 0;
+    }
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background: var(--surface-2);
+      border: 1px solid var(--accent);
+      color: var(--text);
+      padding: 12px 18px;
+      border-radius: 10px;
+      font-size: 0.88rem;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.4);
+      display: none;
+      z-index: 1000;
+    }
+    .muted { color: var(--muted); font-size: 0.85rem; }
+    @media (max-width: 900px) {
+      .form-grid { grid-template-columns: 1fr; }
+      .form-row-2 { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Purchase Order SKU Similarity &amp; Mapping POC</h1>
+      <div class="muted">MongoDB Atlas <code>$vectorSearch</code> &bull; <code>all-MiniLM-L6-v2</code> (384-dim cosine)</div>
+    </div>
+    <div>
+      <span class="badge">DB: purchase_order_poc</span>
+    </div>
+  </header>
+
+  <div class="container">
+    <!-- KPI Overview Strip -->
+    <div class="kpi-grid">
+      <div class="kpi">
+        <div class="kpi-label">Vendor Catalog</div>
+        <div class="kpi-value" id="kpi-vendor">—</div>
+        <div class="kpi-sub">vendor_vector_index</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Customer POs</div>
+        <div class="kpi-value" id="kpi-pos">—</div>
+        <div class="kpi-sub"><span id="kpi-cli">—</span> line items</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Saved Mappings</div>
+        <div class="kpi-value" id="kpi-mappings">—</div>
+        <div class="kpi-sub"><span id="kpi-same">—</span> Same / <span id="kpi-cross">—</span> Cross SKU</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Avg Match Score</div>
+        <div class="kpi-value" id="kpi-avg">—</div>
+        <div class="kpi-sub">Cosine similarity</div>
+      </div>
+    </div>
+
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab('search', this)">1. Description Search &amp; Map</button>
+      <button class="tab-btn" onclick="switchTab('po', this)">2. Customer PO Matcher</button>
+      <button class="tab-btn" onclick="switchTab('mappings', this)">3. Saved SKU Mappings</button>
+      <button class="tab-btn" onclick="switchTab('explorer', this)">4. Data Explorer (Both Ends)</button>
+    </div>
+
+    <!-- TAB 1: Description Search -->
+    <div id="tab-search" class="tab-panel active">
+      <div class="card">
+        <h2>Semantic Similarity Search (<code>$vectorSearch</code>)</h2>
+        <div class="form-grid">
+          <div>
+            <label for="search-desc">Item Description</label>
+            <input id="search-desc" type="text" placeholder="e.g. Heavy Duty Nitrile Gloves Large Blue Powder Free 100ct" />
+          </div>
+          <div>
+            <label for="search-target">Search Collection</label>
+            <select id="search-target">
+              <option value="vendor">vendor_catalog</option>
+              <option value="customer">customer_po_items</option>
+            </select>
+          </div>
+          <div>
+            <label for="search-category">Category Filter</label>
+            <select id="search-category">
+              <option value="">All Categories</option>
+            </select>
+          </div>
+          <div>
+            <label for="search-topk">Top K</label>
+            <input id="search-topk" type="number" min="1" max="15" value="5" />
+          </div>
+          <div>
+            <button class="primary" onclick="runSearch()">Search</button>
+          </div>
+        </div>
+        <div class="form-row-2">
+          <div>
+            <label for="search-cust-sku">Customer SKU (optional — used when saving a mapping)</label>
+            <input id="search-cust-sku" type="text" placeholder="e.g. CUST-GLV-LRG (or leave blank to use matched SKU)" />
+          </div>
+          <div style="display:flex; align-items:flex-end;">
+            <div class="muted">Sample descriptions to test:</div>
+          </div>
+        </div>
+        <div class="chips">
+          <span class="chip" onclick="fillSample('Stainless Steel Hex Bolt M8 x 40mm - Pack of 50', 'SKU-BOLT-M8-40')">Hex Bolt M8x40mm (Same SKU)</span>
+          <span class="chip" onclick="fillSample('Heavy Duty Nitrile Gloves Large Blue Powder Free 100ct', 'CUST-GLV-LRG')">Nitrile Gloves Large (Cross SKU)</span>
+          <span class="chip" onclick="fillSample('Isopropyl Alcohol 99% Pure Cleaning Solvent 1 Liter Bottle', 'CUST-CHEM-IPA1L')">Isopropyl Alcohol 1L (Unit Conversion)</span>
+          <span class="chip" onclick="fillSample('Black Copper Building Wire 12 AWG THHN Stranded 500 Foot Reel', 'VG-THHN-12B')">12 AWG Copper Wire (Cross SKU)</span>
+          <span class="chip" onclick="fillSample('27-Inch IPS 1440p QHD Monitor with USB-C HDMI and DisplayPort', 'NV-MON-27Q')">27&quot; QHD Monitor (Cross SKU)</span>
+        </div>
+      </div>
+
+      <div class="card" id="search-results-card" style="display:none;">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+          <h2 id="search-results-title" style="margin:0;">Results</h2>
+          <button class="secondary" onclick="togglePipeline()">Inspect $vectorSearch Pipeline &amp; Vector</button>
+        </div>
+        <div id="pipeline-inspector" style="display:none;">
+          <pre id="pipeline-json" class="pipeline-box"></pre>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Score</th>
+              <th>SKU</th>
+              <th>Line ID</th>
+              <th>Party / PO</th>
+              <th>Description</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="search-results-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- TAB 2: Customer PO Matcher -->
+    <div id="tab-po" class="tab-panel">
+      <div class="card">
+        <h2>Customer Purchase Orders</h2>
+        <div style="display:flex; gap:12px; align-items:end; flex-wrap:wrap;">
+          <div style="min-width:280px;">
+            <label for="po-select">Select Purchase Order</label>
+            <select id="po-select" onchange="renderSelectedPO()"></select>
+          </div>
+          <button class="secondary" onclick="autoMatchPO(false)">Find Top Vendor Matches</button>
+          <button class="primary" onclick="autoMatchPO(true)">Auto-Match &amp; Save All</button>
+        </div>
+        <div id="po-meta" class="muted" style="margin-top:10px;"></div>
+        <table>
+          <thead>
+            <tr>
+              <th>Line ID</th>
+              <th>Customer SKU</th>
+              <th>Qty / UOM</th>
+              <th>Customer Description</th>
+              <th>Top Vendor Match ($vectorSearch)</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="po-lines-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- TAB 3: Saved SKU Mappings -->
+    <div id="tab-mappings" class="tab-panel">
+      <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+          <h2 style="margin:0;">Saved SKU Mappings (<code>purchase_order_poc.sku_mappings</code>)</h2>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <select id="mapping-filter" onchange="renderMappingsTable()" style="width:auto; padding:6px 10px;">
+              <option value="all">All Mappings</option>
+              <option value="same">Same SKU Only</option>
+              <option value="cross">Cross-SKU Only</option>
+            </select>
+            <button class="secondary" onclick="loadMappings()">Refresh</button>
+          </div>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Customer SKU</th>
+              <th>Vendor SKU</th>
+              <th>Same SKU?</th>
+              <th>Score</th>
+              <th>Customer Description</th>
+              <th>Vendor Description</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="mappings-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- TAB 4: Data Explorer -->
+    <div id="tab-explorer" class="tab-panel">
+      <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+          <h2 style="margin:0;">Vendor Catalog (<code>vendor_catalog</code>)</h2>
+          <input id="vendor-filter-input" type="text" placeholder="Filter vendor items by SKU, category, or description..." oninput="renderVendorCatalog()" style="max-width:340px;" />
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Line ID</th>
+              <th>Vendor SKU</th>
+              <th>Vendor</th>
+              <th>Category</th>
+              <th>UOM / Price</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody id="vendor-catalog-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script>
+    let purchaseOrders = [];
+    let allMappings = [];
+    let vendorItems = [];
+
+    function showToast(msg) {
+      const t = document.getElementById("toast");
+      t.textContent = msg;
+      t.style.display = "block";
+      setTimeout(() => { t.style.display = "none"; }, 3200);
+    }
+
+    function switchTab(tabId, btn) {
+      document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
+      document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+      document.getElementById("tab-" + tabId).classList.add("active");
+      btn.classList.add("active");
+      if (tabId === "mappings") loadMappings();
+      if (tabId === "po" && purchaseOrders.length === 0) loadPOs();
+      if (tabId === "explorer" && vendorItems.length === 0) loadVendorCatalog();
+    }
+
+    function togglePipeline() {
+      const box = document.getElementById("pipeline-inspector");
+      box.style.display = box.style.display === "none" ? "block" : "none";
+    }
+
+    async function loadStats() {
+      const res = await fetch("/api/stats");
+      const s = await res.json();
+      document.getElementById("kpi-vendor").textContent = s.vendor_items;
+      document.getElementById("kpi-pos").textContent = s.purchase_orders;
+      document.getElementById("kpi-cli").textContent = s.customer_line_items;
+      document.getElementById("kpi-mappings").textContent = s.total_mappings;
+      document.getElementById("kpi-same").textContent = s.same_sku_mappings;
+      document.getElementById("kpi-cross").textContent = s.cross_sku_mappings;
+      document.getElementById("kpi-avg").textContent = s.avg_similarity_score.toFixed(4);
+
+      const catSelect = document.getElementById("search-category");
+      if (catSelect.options.length <= 1 && s.categories) {
+        s.categories.forEach(c => {
+          const opt = document.createElement("option");
+          opt.value = c;
+          opt.textContent = c;
+          catSelect.appendChild(opt);
+        });
+      }
+    }
+
+    function fillSample(desc, sku) {
+      document.getElementById("search-desc").value = desc;
+      document.getElementById("search-cust-sku").value = sku;
+      runSearch();
+    }
+
+    function scoreHtml(score) {
+      const pct = Math.min(100, Math.max(0, Math.round(score * 100)));
+      return `
+        <div class="score-wrap">
+          <span>${score.toFixed(4)}</span>
+          <div class="score-bar"><div class="score-fill" style="width:${pct}%"></div></div>
+        </div>
+      `;
+    }
+
+    async function runSearch() {
+      const description = document.getElementById("search-desc").value.trim();
+      const target = document.getElementById("search-target").value;
+      const category = document.getElementById("search-category").value;
+      const top_k = parseInt(document.getElementById("search-topk").value || "5", 10);
+      if (!description) {
+        showToast("Please enter a description to search.");
+        return;
+      }
+
+      const res = await fetch("/api/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ description, target, category, top_k })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showToast(data.error || "Search failed");
+        return;
+      }
+
+      const card = document.getElementById("search-results-card");
+      card.style.display = "block";
+      document.getElementById("search-results-title").textContent =
+        `Top ${data.matches.length} Matches in ${target === "vendor" ? "vendor_catalog" : "customer_po_items"}`;
+
+      document.getElementById("pipeline-json").textContent = JSON.stringify(
+        {
+          query_vector_first_8_dims: data.query_vector_preview,
+          mongodb_aggregation_pipeline: data.pipeline_preview
+        },
+        null,
+        2
+      );
+
+      const tbody = document.getElementById("search-results-body");
+      tbody.innerHTML = "";
+      data.matches.forEach((m, idx) => {
+        const meta = m.metadata || {};
+        const party = target === "vendor"
+          ? (meta.vendor_name || meta.vendor_id || "")
+          : `${meta.po_number || ""} (${meta.customer_name || ""})`;
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${idx + 1}</td>
+          <td>${scoreHtml(m.similarity)}</td>
+          <td><span class="sku-pill">${m.sku}</span></td>
+          <td class="muted">${m.line_item_id}</td>
+          <td>${party}</td>
+          <td>${m.description}</td>
+          <td></td>
+        `;
+        if (target === "vendor") {
+          const btn = document.createElement("button");
+          btn.className = "secondary";
+          btn.textContent = "Map SKU";
+          btn.onclick = () => {
+            const custSkuInput = document.getElementById("search-cust-sku").value.trim();
+            const customer_sku = custSkuInput || m.sku;
+            saveMapping({
+              customer_sku,
+              vendor_sku: m.sku,
+              customer_description: description,
+              vendor_description: m.description,
+              similarity_score: m.similarity
+            });
+          };
+          tr.lastElementChild.appendChild(btn);
+        } else {
+          tr.lastElementChild.innerHTML = `<span class="muted">—</span>`;
+        }
+        tbody.appendChild(tr);
+      });
+    }
+
+    async function saveMapping(payload) {
+      const res = await fetch("/api/mappings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showToast(data.error || "Failed to save mapping");
+        return;
+      }
+      showToast(`Saved mapping: ${payload.customer_sku} ↔ ${payload.vendor_sku}`);
+      loadStats();
+    }
+
+    async function loadPOs() {
+      const res = await fetch("/api/pos");
+      const data = await res.json();
+      purchaseOrders = data.purchase_orders || [];
+      const select = document.getElementById("po-select");
+      select.innerHTML = "";
+      purchaseOrders.forEach(po => {
+        const opt = document.createElement("option");
+        opt.value = po.po_number;
+        opt.textContent = `${po.po_number} — ${po.customer_name} (${po.line_items.length} items)`;
+        select.appendChild(opt);
+      });
+      renderSelectedPO();
+    }
+
+    function renderSelectedPO() {
+      const poNum = document.getElementById("po-select").value;
+      const po = purchaseOrders.find(p => p.po_number === poNum);
+      if (!po) return;
+
+      document.getElementById("po-meta").textContent =
+        `Customer: ${po.customer_name} (${po.customer_id}) | Date: ${po.order_date} | Status: ${po.status}`;
+
+      const tbody = document.getElementById("po-lines-body");
+      tbody.innerHTML = "";
+      po.line_items.forEach(li => {
+        const tr = document.createElement("tr");
+        tr.id = `po-row-${li.line_item_id}`;
+        tr.innerHTML = `
+          <td class="muted">${li.line_item_id}</td>
+          <td><span class="sku-pill">${li.sku}</span></td>
+          <td>${li.quantity} ${li.uom}</td>
+          <td>${li.description}</td>
+          <td id="match-cell-${li.line_item_id}" class="muted">Click "Find Match"</td>
+          <td id="action-cell-${li.line_item_id}"></td>
+        `;
+        const btn = document.createElement("button");
+        btn.className = "secondary";
+        btn.textContent = "Find Match";
+        btn.onclick = () => matchLineItem(po.po_number, li, false);
+        tr.querySelector(`#action-cell-${li.line_item_id}`).appendChild(btn);
+        tbody.appendChild(tr);
+      });
+    }
+
+    async function matchLineItem(poNumber, li, autoSave) {
+      const matchCell = document.getElementById(`match-cell-${li.line_item_id}`);
+      const actionCell = document.getElementById(`action-cell-${li.line_item_id}`);
+      matchCell.textContent = "Searching...";
+
+      const res = await fetch("/api/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ description: li.description, target: "vendor", top_k: 3 })
+      });
+      const data = await res.json();
+      const matches = data.matches || [];
+      if (!matches.length) {
+        matchCell.textContent = "No match found";
+        return;
+      }
+
+      const best = matches[0];
+      const same = best.sku === li.sku;
+      matchCell.innerHTML = `
+        <div style="margin-bottom:4px;">
+          <span class="sku-pill">${best.sku}</span>
+          ${same ? '<span class="badge">SAME SKU</span>' : '<span class="badge badge-amber">DIFF SKU</span>'}
+          <span class="muted" style="margin-left:6px;">Score: ${best.similarity.toFixed(4)}</span>
+        </div>
+        <div>${best.description}</div>
+      `;
+
+      const payload = {
+        customer_sku: li.sku,
+        vendor_sku: best.sku,
+        customer_description: li.description,
+        vendor_description: best.description,
+        similarity_score: best.similarity,
+        po_number: poNumber,
+        line_item_id: li.line_item_id
+      };
+
+      if (autoSave) {
+        await saveMapping(payload);
+      }
+
+      actionCell.innerHTML = "";
+      const saveBtn = document.createElement("button");
+      saveBtn.className = "primary";
+      saveBtn.style.padding = "6px 12px";
+      saveBtn.style.fontSize = "0.8rem";
+      saveBtn.textContent = autoSave ? "Saved" : "Save Mapping";
+      saveBtn.onclick = () => saveMapping(payload);
+      actionCell.appendChild(saveBtn);
+    }
+
+    async function autoMatchPO(autoSave) {
+      const poNum = document.getElementById("po-select").value;
+      const po = purchaseOrders.find(p => p.po_number === poNum);
+      if (!po) return;
+      for (const li of po.line_items) {
+        await matchLineItem(po.po_number, li, autoSave);
+      }
+      if (autoSave) {
+        showToast(`Matched and saved all ${po.line_items.length} line items for ${poNum}`);
+      }
+    }
+
+    async function loadMappings() {
+      const res = await fetch("/api/mappings");
+      const data = await res.json();
+      allMappings = data.mappings || [];
+      renderMappingsTable();
+      loadStats();
+    }
+
+    function renderMappingsTable() {
+      const filter = document.getElementById("mapping-filter").value;
+      const rows = allMappings.filter(m => {
+        if (filter === "same") return !!m.same_sku;
+        if (filter === "cross") return !m.same_sku;
+        return true;
+      });
+
+      const tbody = document.getElementById("mappings-body");
+      tbody.innerHTML = "";
+      rows.forEach(m => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td><span class="sku-pill">${m.customer_sku}</span></td>
+          <td><span class="sku-pill">${m.vendor_sku}</span></td>
+          <td>${m.same_sku ? '<span class="badge">YES</span>' : '<span class="badge badge-blue">NO</span>'}</td>
+          <td>${scoreHtml(m.similarity_score || 0)}</td>
+          <td>${m.customer_description || ""}</td>
+          <td>${m.vendor_description || ""}</td>
+          <td></td>
+        `;
+        const delBtn = document.createElement("button");
+        delBtn.className = "danger";
+        delBtn.textContent = "Delete";
+        delBtn.onclick = async () => {
+          await fetch("/api/mappings", {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ customer_sku: m.customer_sku, vendor_sku: m.vendor_sku })
+          });
+          showToast(`Deleted ${m.customer_sku} ↔ ${m.vendor_sku}`);
+          loadMappings();
+        };
+        tr.lastElementChild.appendChild(delBtn);
+        tbody.appendChild(tr);
+      });
+    }
+
+    async function loadVendorCatalog() {
+      const res = await fetch("/api/vendor-catalog");
+      const data = await res.json();
+      vendorItems = data.items || [];
+      renderVendorCatalog();
+    }
+
+    function renderVendorCatalog() {
+      const q = (document.getElementById("vendor-filter-input").value || "").toLowerCase();
+      const filtered = vendorItems.filter(v =>
+        !q ||
+        v.sku.toLowerCase().includes(q) ||
+        v.description.toLowerCase().includes(q) ||
+        (v.category || "").toLowerCase().includes(q) ||
+        (v.vendor_name || "").toLowerCase().includes(q)
+      );
+      const tbody = document.getElementById("vendor-catalog-body");
+      tbody.innerHTML = "";
+      filtered.forEach(v => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td class="muted">${v.line_item_id}</td>
+          <td><span class="sku-pill">${v.sku}</span></td>
+          <td>${v.vendor_name}</td>
+          <td><span class="badge badge-blue">${v.category || ""}</span></td>
+          <td>${v.uom} / $${Number(v.unit_price || 0).toFixed(2)}</td>
+          <td>${v.description}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    loadStats();
+    loadPOs();
+  </script>
+</body>
+</html>
